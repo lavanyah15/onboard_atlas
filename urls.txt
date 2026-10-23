@@ -1,0 +1,2 @@
+https://handbook.gitlab.com/handbook/
+https://posthog.com/handbook
