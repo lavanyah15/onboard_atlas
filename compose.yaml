@@ -1,0 +1,36 @@
+
+services:
+  api:
+    build: .
+    container_name: onboard-atlas-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://onboard_user:onboard_local_password@db:5432/onboard_atlas
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: onboard-atlas-db
+    environment:
+      POSTGRES_DB: onboard_atlas
+      POSTGRES_USER: onboard_user
+      POSTGRES_PASSWORD: onboard_local_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onboard_user -d onboard_atlas"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
