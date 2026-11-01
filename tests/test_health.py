@@ -1,4 +1,9 @@
-def test_health_is_fast_and_ok(client):
-    r = client.get("/health")
-    assert r.status_code == 200
-    assert r.json() == {"status": "ok", "app": "examate-rag", "environment": "test"}
+﻿def test_health_is_fast_and_ok(client):
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "app": "onboard-atlas",
+        "environment": "test",
+    }
