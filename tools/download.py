@@ -1,6 +1,3 @@
-"""Polite downloader: python tools/download.py urls.txt
-urls.txt: one URL per line (lines starting with # are skipped).
-Saves files to data/raw/ and logs every file to data/manifest.csv."""
 
 import csv
 import hashlib
@@ -8,16 +5,16 @@ import os
 import sys
 import time
 from datetime import date
+from pathlib import Path
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 
-import requests
+from playwright.sync_api import sync_playwright
 
-RAW = "data/raw"
-MANIFEST = "data/manifest.csv"
-HEADERS = {"User-Agent": "ExamateStudentProject/1.0 (learning project; contact: your-email@example.com)"}
-DELAY = 2  # seconds between requests: be polite to government servers
+RAW = Path("data/raw/handbook")
+MANIFEST = Path("data/manifest.csv")
 
+DELAY = 2
 robots = {}
 
 
@@ -30,67 +27,123 @@ def allowed(url):
         try:
             rp.read()
         except Exception:
-            rp = None  # robots.txt unreachable: proceed carefully
+            rp = None
 
         robots[root] = rp
 
     rp = robots[root]
-    return rp is None or rp.can_fetch(HEADERS["User-Agent"], url)
+    return rp is None or rp.can_fetch(
+        "ExamateStudentProject/1.0", url
+    )
 
 
 def name_for(url):
-    name = os.path.basename(urlparse(url).path) or "index.html"
-    return name.replace(" ", "_")
+    parsed = urlparse(url)
+
+    # Include the website name to avoid filename collisions.
+    site = parsed.netloc.replace(".", "_")
+    path = parsed.path.strip("/").replace("/", "__")
+
+    if not path:
+        path = "homepage"
+
+    return f"{site}__{path}.pdf"
+
 
 def main(list_file):
-    os.makedirs(RAW, exist_ok=True)
-    new_manifest = not os.path.exists(MANIFEST)
+    RAW.mkdir(parents=True, exist_ok=True)
 
-    with open(MANIFEST, "a", newline="") as mf:
+    new_manifest = not MANIFEST.exists()
+
+    with open(MANIFEST, "a", newline="", encoding="utf-8") as mf:
         log = csv.writer(mf)
 
         if new_manifest:
-            log.writerow(["file", "source_url", "downloaded_on", "bytes", "sha256"])
-
-        with open(list_file) as fh:
-            urls = [u.strip() for u in fh]
-
-        for url in urls:
-            if not url or url.startswith("#"):
-                continue
-
-            path = os.path.join(RAW, name_for(url))
-
-            if os.path.exists(path):
-                print("skip (already have)", path)
-                continue
-
-            if not allowed(url):
-                print("BLOCKED by robots.txt, not downloading:", url)
-                continue
-
-            r = requests.get(url, headers=HEADERS, timeout=30)
-
-            if r.status_code != 200:
-                print("failed", r.status_code, url)
-                continue
-
-            with open(path, "wb") as f:
-                f.write(r.content)
-
-            digest = hashlib.sha256(r.content).hexdigest()[:16]
             log.writerow([
-                path,
-                url,
-                date.today().isoformat(),
-                len(r.content),
-                digest
+                "file",
+                "source_url",
+                "downloaded_on",
+                "bytes",
+                "sha256"
             ])
 
-            print("saved", path, len(r.content), "bytes")
-            time.sleep(DELAY)
+        with open(list_file, encoding="utf-8") as fh:
+            urls = [
+                line.strip()
+                for line in fh
+                if line.strip() and not line.strip().startswith("#")
+            ]
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page()
+
+            for index, url in enumerate(urls, start=1):
+                if not allowed(url):
+                    print("Blocked by robots.txt:", url)
+                    continue
+
+                output_file = RAW / name_for(url)
+
+                if output_file.exists():
+                    print("Already exists:", output_file)
+                    continue
+
+                try:
+                    print(f"[{index}/{len(urls)}] Converting:", url)
+
+                    response = page.goto(
+                        url,
+                        wait_until="domcontentloaded",
+                        timeout=60000
+                    )
+
+                    if response is None or not response.ok:
+                        print("Failed to load:", url)
+                        continue
+
+                    # Wait for page fonts to load.
+                    page.evaluate(
+                        "() => document.fonts.ready.then(() => true)"
+                    )
+
+                    # Save the rendered webpage as PDF.
+                    page.pdf(
+                        path=str(output_file),
+                        format="A4",
+                        print_background=True,
+                        prefer_css_page_size=True
+                    )
+
+                    content = output_file.read_bytes()
+                    digest = hashlib.sha256(content).hexdigest()[:16]
+
+                    log.writerow([
+                        str(output_file),
+                        url,
+                        date.today().isoformat(),
+                        len(content),
+                        digest
+                    ])
+                    mf.flush()
+
+                    print("Saved PDF:", output_file)
+
+                except Exception as error:
+                    print("Failed:", url, error)
+
+                time.sleep(DELAY)
+
+            browser.close()
+
+    print("\nPDF conversion completed.")
+    print("PDF folder:", RAW)
+    print("Manifest:", MANIFEST)
 
 
 if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python tools/download.py urls.txt")
+        sys.exit(1)
+
     main(sys.argv[1])
-    

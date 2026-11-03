@@ -10,7 +10,6 @@ Commit after every class. Tag every Friday: `git tag week-N && git push origin w
 - [ ] 50+ pages collected, DATASET.md filled, sample in data/sample/
 - [ ] Tag week-1 pushed
 
-
 ## Week 2 (tag week-2 by Fri 30 Oct)
 - [x] LLM integration with structured JSON response (`POST /ask`)
 - [ ] Streaming, timeouts and retry
