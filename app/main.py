@@ -1,3 +1,4 @@
+
 import json
 import time
 from collections.abc import AsyncIterator
@@ -41,7 +42,11 @@ def say_root():
 @app.get("/health")
 def health(settings: SettingsDep) -> dict:
     """Liveness: the process is up. Must be fast and must not call the LLM or the DB."""
-    return {"status": "ok", "app": settings.app_name, "environment": settings.environment}
+    return {
+        "status": "ok",
+        "app": settings.app_name,
+        "environment": settings.environment,
+    }
 
 
 @app.get("/ready")
@@ -49,12 +54,24 @@ def ready(settings: SettingsDep):
     """Readiness: dependencies are reachable. Load balancers and hosts use this."""
     if not settings.database_url:
         return {"status": "ready", "database": "not configured"}
+
     try:
-        with psycopg.connect(settings.database_url, connect_timeout=3) as conn:
+        with psycopg.connect(
+            settings.database_url,
+            connect_timeout=3,
+        ) as conn:
             conn.execute("SELECT 1")
+
         return {"status": "ready", "database": "ok"}
-    except Exception as exc:  # report, don't crash
-        return JSONResponse(status_code=503, content={"status": "not ready", "database": str(exc)[:200]})
+
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not ready",
+                "database": str(exc)[:200],
+            },
+        )
 
 
 def sse(data: dict, event: str | None = None) -> str:
@@ -63,9 +80,16 @@ def sse(data: dict, event: str | None = None) -> str:
 
 
 @app.post("/chat")
-async def chat(request: ChatRequest, settings: SettingsDep, provider: LLMDep) -> StreamingResponse:
+async def chat(
+    request: ChatRequest,
+    settings: SettingsDep,
+    provider: LLMDep,
+) -> StreamingResponse:
     llm_request = LLMRequest(
-        messages=tuple(Message(role=message.role, content=message.content) for message in request.messages),
+        messages=tuple(
+            Message(role=message.role, content=message.content)
+            for message in request.messages
+        ),
         model=request.model,
     )
 
@@ -73,18 +97,26 @@ async def chat(request: ChatRequest, settings: SettingsDep, provider: LLMDep) ->
         usage = None
         start = time.perf_counter()
         ok = True
+
         try:
             async for chunk in provider.stream(llm_request):
                 if chunk.text:
                     yield sse({"delta": chunk.text})
+
                 if chunk.usage is not None:
                     usage = chunk.usage
+
         except (LLMUnavailable, LLMConfigurationError) as error:
             ok = False
             yield sse({"error": str(error)}, event="error")
 
         latency_ms = (time.perf_counter() - start) * 1000
-        usage_data = usage or {"input_tokens": 0, "output_tokens": 0, "estimated": False}
+        usage_data = usage or {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "estimated": False,
+        }
+
         record = log_call(
             settings.cost_log_path,
             provider=settings.llm_provider,
@@ -99,9 +131,19 @@ async def chat(request: ChatRequest, settings: SettingsDep, provider: LLMDep) ->
 
         if hasattr(usage_data, "__dict__"):
             usage_data = usage_data.__dict__
-        yield sse({"usage": usage_data, "cost_usd": record["cost_usd"]}, event="done")
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+        yield sse(
+            {
+                "usage": usage_data,
+                "cost_usd": record["cost_usd"],
+            },
+            event="done",
+        )
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+    )
 
 
 @app.get("/usage")
