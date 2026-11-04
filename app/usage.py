@@ -1,4 +1,4 @@
-﻿from threading import Lock
+from threading import Lock
 
 _lock = Lock()
 
@@ -35,10 +35,7 @@ def record_usage(result: dict) -> None:
     if prices is None:
         raise ValueError(f"No pricing configured for model: {model}")
 
-    cost = (
-        input_tokens * prices["input"]
-        + output_tokens * prices["output"]
-    ) / 1_000_000
+    cost = (input_tokens * prices["input"] + output_tokens * prices["output"]) / 1_000_000
 
     with _lock:
         _usage["total_requests"] += 1
@@ -68,8 +65,5 @@ def get_usage() -> dict:
     with _lock:
         return {
             **_usage,
-            "models": {
-                name: values.copy()
-                for name, values in _usage["models"].items()
-            },
+            "models": {name: values.copy() for name, values in _usage["models"].items()},
         }

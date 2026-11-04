@@ -1,4 +1,4 @@
-﻿def test_health_is_fast_and_ok(client):
+def test_health_is_fast_and_ok(client):
     response = client.get("/health")
 
     assert response.status_code == 200

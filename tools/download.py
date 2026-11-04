@@ -1,4 +1,3 @@
-
 import csv
 import hashlib
 import sys
@@ -31,9 +30,7 @@ def allowed(url):
         robots[root] = rp
 
     rp = robots[root]
-    return rp is None or rp.can_fetch(
-        "ExamateStudentProject/1.0", url
-    )
+    return rp is None or rp.can_fetch("ExamateStudentProject/1.0", url)
 
 
 def name_for(url):
@@ -58,20 +55,10 @@ def main(list_file):
         log = csv.writer(mf)
 
         if new_manifest:
-            log.writerow([
-                "file",
-                "source_url",
-                "downloaded_on",
-                "bytes",
-                "sha256"
-            ])
+            log.writerow(["file", "source_url", "downloaded_on", "bytes", "sha256"])
 
         with open(list_file, encoding="utf-8") as fh:
-            urls = [
-                line.strip()
-                for line in fh
-                if line.strip() and not line.strip().startswith("#")
-            ]
+            urls = [line.strip() for line in fh if line.strip() and not line.strip().startswith("#")]
 
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
@@ -91,39 +78,24 @@ def main(list_file):
                 try:
                     print(f"[{index}/{len(urls)}] Converting:", url)
 
-                    response = page.goto(
-                        url,
-                        wait_until="domcontentloaded",
-                        timeout=60000
-                    )
+                    response = page.goto(url, wait_until="domcontentloaded", timeout=60000)
 
                     if response is None or not response.ok:
                         print("Failed to load:", url)
                         continue
 
                     # Wait for page fonts to load.
-                    page.evaluate(
-                        "() => document.fonts.ready.then(() => true)"
-                    )
+                    page.evaluate("() => document.fonts.ready.then(() => true)")
 
                     # Save the rendered webpage as PDF.
                     page.pdf(
-                        path=str(output_file),
-                        format="A4",
-                        print_background=True,
-                        prefer_css_page_size=True
+                        path=str(output_file), format="A4", print_background=True, prefer_css_page_size=True
                     )
 
                     content = output_file.read_bytes()
                     digest = hashlib.sha256(content).hexdigest()[:16]
 
-                    log.writerow([
-                        str(output_file),
-                        url,
-                        date.today().isoformat(),
-                        len(content),
-                        digest
-                    ])
+                    log.writerow([str(output_file), url, date.today().isoformat(), len(content), digest])
                     mf.flush()
 
                     print("Saved PDF:", output_file)

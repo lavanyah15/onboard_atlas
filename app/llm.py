@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 
 from google import genai
 
@@ -41,15 +41,9 @@ def generate_answer(prompt: str, settings: Settings | None = None) -> dict:
             return {
                 "answer": answer,
                 "model_used": model_name,
-                "input_tokens": (
-                    usage.prompt_token_count if usage else 0
-                ),
-                "output_tokens": (
-                    usage.candidates_token_count if usage else 0
-                ),
-                "total_tokens": (
-                    usage.total_token_count if usage else 0
-                ),
+                "input_tokens": (usage.prompt_token_count if usage else 0),
+                "output_tokens": (usage.candidates_token_count if usage else 0),
+                "total_tokens": (usage.total_token_count if usage else 0),
             }
 
         except Exception as exc:
@@ -60,6 +54,4 @@ def generate_answer(prompt: str, settings: Settings | None = None) -> dict:
             )
             errors.append(f"{model_name}: {exc}")
 
-    raise RuntimeError(
-        "Both Gemini models failed. " + " | ".join(errors)
-    )
+    raise RuntimeError("Both Gemini models failed. " + " | ".join(errors))
